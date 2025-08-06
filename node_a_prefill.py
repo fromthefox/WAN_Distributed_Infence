@@ -2,6 +2,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import socket
 import pickle
+import time
 
 # 配置
 model_name = "Qwen/Qwen2.5-0.5B-Instruct"
@@ -34,6 +35,8 @@ def main():
     )
     input_ids = tokenizer([text], return_tensors="pt").input_ids.to(device)
 
+    # 记录推理开始时间
+    start_time = time.time()
     print("节点A：开始Prefill阶段...")
     # =========================  Prefill  =========================
     with torch.no_grad():
@@ -74,7 +77,26 @@ def main():
             result_data += s.recv(result_size - len(result_data))
         
         response = pickle.loads(result_data)
+        
+        # 记录推理结束时间
+        end_time = time.time()
+        
+        # 计算统计数据
+        total_latency = end_time - start_time
+        
+        # 计算生成的token数量（从response中解析生成的文本）
+        generated_tokens = len(tokenizer.encode(response))
+        
+        # 计算吞吐量 (tokens/second)
+        throughput = generated_tokens / total_latency if total_latency > 0 else 0
+        
         print(f"节点A：收到最终结果：\n{response}")
+        print("\n" + "="*50)
+        print("推理性能统计:")
+        print(f"总时延: {total_latency:.3f} 秒")
+        print(f"生成Token数量: {generated_tokens}")
+        print(f"吞吐量: {throughput:.2f} Token/s")
+        print("="*50)
 
 if __name__ == "__main__":
     main()
