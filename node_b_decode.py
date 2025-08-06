@@ -4,7 +4,7 @@ import socket
 import pickle
 
 # 配置
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+model_name = r"/yhbian_wan_d_inf"
 device = "cpu"
 HOST = "0.0.0.0"  # 监听所有接口
 PORT = 12345

@@ -1,6 +1,7 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+# 修改为本地模型路径
+model_name = r"/yhbian_wan_d_inf/"  # 请替换为您的实际模型路径
 
 model = AutoModelForCausalLM.from_pretrained(
     model_name,

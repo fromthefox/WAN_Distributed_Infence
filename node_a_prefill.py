@@ -5,7 +5,7 @@ import pickle
 import time
 
 # 配置
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+model_name = r"/yhbian_wan_d_inf/"
 device = "cpu"
 max_new_tokens = 32
 
