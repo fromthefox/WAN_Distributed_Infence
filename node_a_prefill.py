@@ -3,17 +3,105 @@ import torch
 import socket
 import pickle
 import time
+import random
 
 # 配置
-model_name = r"/yhbian_wan_d_inf/"
+model_name = r"D:\下载项目"
 device = "cpu"
-max_new_tokens = 32
+max_new_tokens = 256
 
 # 节点B的地址配置
-NODE_B_HOST = "127.0.0.1"  # 修改为节点B的实际IP
+NODE_B_HOST = "192.168.1.104"  # 修改为节点B的实际IP
 NODE_B_PORT = 12345
 
+# 网络模拟配置
+PACKET_LOSS_RATE = 0.1  # 丢包率 (0.0-1.0)，0.1表示10%丢包率
+MAX_RETRIES = 15  # 最大重传次数
+BANDWIDTH_LIMIT = 10 * 1024 * 1024  # 带宽限制 10MB/s
+NETWORK_DELAY = 0.04  # 网络延迟 40ms
+
+def simulate_packet_loss():
+    """模拟丢包，返回True表示丢包"""
+    return random.random() < PACKET_LOSS_RATE
+
+def simulate_network_delay():
+    """模拟网络延迟"""
+    time.sleep(NETWORK_DELAY)
+
+def calculate_transmission_time(data_size):
+    """计算传输时间，基于带宽限制"""
+    return data_size / BANDWIDTH_LIMIT
+
+def send_data_with_bandwidth_control(sock, data):
+    """带带宽控制的数据发送函数"""
+    data_size = len(data)
+    transmission_time = calculate_transmission_time(data_size)
+    
+    # 模拟网络延迟
+    simulate_network_delay()
+    
+    # 发送数据
+    sock.sendall(data)
+    
+    # 模拟传输时间（带宽限制）
+    time.sleep(transmission_time)
+    
+    print(f"节点A：发送数据 {data_size} 字节，传输时间: {transmission_time:.3f}秒")
+
+def receive_data_with_bandwidth_control(sock, size):
+    """带带宽控制的数据接收函数"""
+    transmission_time = calculate_transmission_time(size)
+    
+    # 模拟网络延迟
+    simulate_network_delay()
+    
+    # 接收数据
+    data = b''
+    while len(data) < size:
+        data += sock.recv(size - len(data))
+    
+    # 模拟传输时间（带宽限制）
+    time.sleep(transmission_time)
+    
+    print(f"节点A：接收数据 {size} 字节，传输时间: {transmission_time:.3f}秒")
+    return data
+
+def send_data_with_loss_simulation(sock, data):
+    """带丢包模拟的数据发送函数"""
+    for attempt in range(MAX_RETRIES + 1):
+        if simulate_packet_loss() and attempt < MAX_RETRIES:
+            print(f"节点A：模拟丢包，第{attempt + 1}次尝试失败，准备重传...")
+            time.sleep(0.1)  # 模拟重传延迟
+            continue
+        else:
+            send_data_with_bandwidth_control(sock, data)
+            if attempt > 0:
+                print(f"节点A：重传成功，共尝试{attempt + 1}次")
+            return True
+    
+    print(f"节点A：发送失败，已达到最大重传次数{MAX_RETRIES}")
+    return False
+
+def receive_data_with_loss_simulation(sock, size):
+    """带丢包模拟的数据接收函数"""
+    for attempt in range(MAX_RETRIES + 1):
+        if simulate_packet_loss() and attempt < MAX_RETRIES:
+            print(f"节点A：模拟接收丢包，第{attempt + 1}次尝试失败...")
+            time.sleep(0.1)  # 模拟重传延迟
+            continue
+        else:
+            data = receive_data_with_bandwidth_control(sock, size)
+            if attempt > 0:
+                print(f"节点A：接收重传成功，共尝试{attempt + 1}次")
+            return data
+    
+    print(f"节点A：接收失败，已达到最大重传次数{MAX_RETRIES}")
+    return None
+
 def main():
+    print(f"节点A：网络模拟配置 - 丢包率: {PACKET_LOSS_RATE*100:.1f}%, 最大重传次数: {MAX_RETRIES}")
+    print(f"节点A：带宽限制: {BANDWIDTH_LIMIT/1024/1024:.1f}MB/s, 网络延迟: {NETWORK_DELAY*1000:.0f}ms")
+    
     # 载入模型、tokenizer
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
@@ -63,18 +151,31 @@ def main():
         serialized_data = pickle.dumps(data_to_send)
         data_size = len(serialized_data)
         
-        # 先发送数据大小
-        s.sendall(data_size.to_bytes(4, byteorder='big'))
-        # 再发送实际数据
-        s.sendall(serialized_data)
+        # 使用带丢包模拟的发送函数
+        print("节点A：发送数据大小...")
+        if not send_data_with_loss_simulation(s, data_size.to_bytes(4, byteorder='big')):
+            print("节点A：发送数据大小失败，终止程序")
+            return
+        
+        print("节点A：发送实际数据...")
+        if not send_data_with_loss_simulation(s, serialized_data):
+            print("节点A：发送实际数据失败，终止程序")
+            return
         
         print("节点A：数据发送完成，等待节点B返回结果...")
         
-        # 接收返回结果
-        result_size = int.from_bytes(s.recv(4), byteorder='big')
-        result_data = b''
-        while len(result_data) < result_size:
-            result_data += s.recv(result_size - len(result_data))
+        # 使用带丢包模拟的接收函数
+        result_size_data = receive_data_with_loss_simulation(s, 4)
+        if result_size_data is None:
+            print("节点A：接收结果大小失败，终止程序")
+            return
+        
+        result_size = int.from_bytes(result_size_data, byteorder='big')
+        
+        result_data = receive_data_with_loss_simulation(s, result_size)
+        if result_data is None:
+            print("节点A：接收结果数据失败，终止程序")
+            return
         
         response = pickle.loads(result_data)
         

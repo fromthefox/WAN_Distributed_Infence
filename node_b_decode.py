@@ -4,7 +4,7 @@ import socket
 import pickle
 
 # 配置
-model_name = r"/yhbian_wan_d_inf"
+model_name = r"/home/vemu4/yhbian"
 device = "cpu"
 HOST = "0.0.0.0"  # 监听所有接口
 PORT = 12345
